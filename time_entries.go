@@ -5,14 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"harvest-mcp/harvestclient"
+
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// TimeEntriesClient defines the interface for getting time entries
+type TimeEntriesClient interface {
+	GetTimeEntries(ctx context.Context, date string) ([]byte, error)
+}
 
 func listTimeEntriesHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	dateOffset, ok := request.Params.Arguments["date_offset"].(string)
@@ -27,36 +32,21 @@ func listTimeEntriesHandler(ctx context.Context, request mcp.CallToolRequest) (*
 	// Adjust the date based on the offset
 	targetDate := time.Now().AddDate(0, 0, -dateOffsetInt).Format("20060102")
 
-	// Create HTTP client and request
-	client := &http.Client{}
-	url := fmt.Sprintf("https://api.harvestapp.com/v2/time_entries?from=%s&to=%s", targetDate, targetDate)
+	// Create Harvest client
+	client := harvestclient.NewClient(
+		os.Getenv("HARVEST_ACCESS_TOKEN"),
+		os.Getenv("HARVEST_ACCOUNT_ID"),
+		"MCP-Harvest-Integration (roy.touw@newstory.nl)",
+	)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	return handleTimeEntries(ctx, client, targetDate)
+}
+
+func handleTimeEntries(ctx context.Context, client TimeEntriesClient, targetDate string) (*mcp.CallToolResult, error) {
+	// Make the API call
+	body, err := client.GetTimeEntries(ctx, targetDate)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to create request: %v", err)), nil
-	}
-
-	// Add required headers
-	req.Header.Add("Authorization", "Bearer "+os.Getenv("HARVEST_ACCESS_TOKEN"))
-	req.Header.Add("Harvest-Account-ID", os.Getenv("HARVEST_ACCOUNT_ID"))
-	req.Header.Add("User-Agent", "MCP-Harvest-Integration (roy.touw@newstory.nl)")
-
-	// Make the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to make request: %v", err)), nil
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to read response: %v", err)), nil
-	}
-
-	// Check if response is successful
-	if resp.StatusCode != http.StatusOK {
-		return mcp.NewToolResultError(fmt.Sprintf("API request failed with status %d: %s", resp.StatusCode, string(body))), nil
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	// Pretty print the JSON response

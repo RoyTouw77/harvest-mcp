@@ -5,42 +5,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
+
+	"harvest-mcp/harvestclient"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
+// WhoAmIClient defines the interface for getting user information
+type WhoAmIClient interface {
+	GetWhoAmI(ctx context.Context) ([]byte, error)
+}
+
 func whoamiHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Create HTTP client and request
-	client := &http.Client{}
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.harvestapp.com/api/v2/users/me.json", nil)
+	// Create Harvest client
+	client := harvestclient.NewClient(
+		os.Getenv("HARVEST_ACCESS_TOKEN"),
+		os.Getenv("HARVEST_ACCOUNT_ID"),
+		"MCP-Harvest-Integration (roy.touw@newstory.nl)",
+	)
+
+	return handleWhoAmI(ctx, client)
+}
+
+func handleWhoAmI(ctx context.Context, client WhoAmIClient) (*mcp.CallToolResult, error) {
+	// Make the API call
+	body, err := client.GetWhoAmI(ctx)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to create request: %v", err)), nil
-	}
-
-	// Add required headers
-	req.Header.Add("Authorization", "Bearer "+os.Getenv("HARVEST_ACCESS_TOKEN"))
-	req.Header.Add("Harvest-Account-ID", os.Getenv("HARVEST_ACCOUNT_ID"))
-	req.Header.Add("User-Agent", "MCP-Harvest-Integration (roy.touw@newstory.nl)")
-
-	// Make the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to make request: %v", err)), nil
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Failed to read response: %v", err)), nil
-	}
-
-	// Check if response is successful
-	if resp.StatusCode != http.StatusOK {
-		return mcp.NewToolResultError(fmt.Sprintf("API request failed with status %d: %s", resp.StatusCode, string(body))), nil
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	// Pretty print the JSON response
