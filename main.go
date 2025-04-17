@@ -12,7 +12,7 @@ func main() {
 	client := harvestclient.NewClient(
 		os.Getenv("HARVEST_ACCESS_TOKEN"),
 		os.Getenv("HARVEST_ACCOUNT_ID"),
-		"MCP-Harvest-Integration (roy.touw@newstory.nl)",
+		"MCP-Harvest-Integration (roy.touw@q42.nl)˝",
 	)
 
 	s := server.NewMCPServer(
